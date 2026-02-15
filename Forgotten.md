@@ -1,10 +1,10 @@
 # Forgotten writeup
 
-#1 Nmap
+## 1 Nmap
  $ sudo nmap -p- -sC -sV --min-rate 1000 10.129.234.81
   -> http, ssh is open
 
-#2 User flag
+## 2 User flag
  visit port 80 via browser, website is working on the target machine.
  $ gobuster dir -w /usr/share/dirbuster/wordlists/directory-list-2.3-small.txt -u http://10.129.234.81
  ->find /survey, so visit there
@@ -35,7 +35,7 @@
 
  [+] get user.txt [+]
 
-# Root flag
+## 3 Root flag
  container)$ sudo -l
  -> "(ALL : ALL) ALL" is in the output, this means we can run anything with sudo as limesvc
  target)$ sudo su

@@ -1,7 +1,7 @@
 # Baby Writeup
 
 
-#1 Nmap
+## 1 Nmap
  $ sudo nmap -p- -sC -sV --min-rate 1000 10.129.116.120
 
  domain name is "baby.vl"
@@ -11,7 +11,7 @@
 
  Results of nmap scan show that the target machine is Windows and LDAP port(389, 3268) is open
 
-#2 user flag
+## 2 user flag
  $ ldapsearch -x -b "dc=baby,dc=vl" "(objectClass=user)" -H ldap://BabyDC.baby.vl
 
  I got usernames, so add the usernames to a file "users.txt"
@@ -35,7 +35,7 @@
  $ evil-winrm -i baby.vl -u caroline.robinson -p {New password}
 
 
-#3 root flag
+## 3 root flag
  winrm$ whoami /priv
  the output show that caroline robinson account have  
     "SeBackupPrivilege", "SeRestorePrivilege" which are usually given to users in the "Backup Operators" group.
