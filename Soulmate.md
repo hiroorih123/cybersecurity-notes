@@ -55,7 +55,7 @@ from /usr/local/lib/erlang_login/start.escript, erlang seems to be running on po
 but port 2222 is local and we cannot scan the port with nmap.  
   
 so, before nmap, we do local port forwarding!!  
- ** Local port forwarding is an SSH technique that redirects network traffic from a specific port on your local computer (localhost) through a secure, encrypted tunnel to a target port on a remote server.**  
+ **Local port forwarding is an SSH technique that redirects network traffic from a specific port on your local computer (localhost) through a secure, encrypted tunnel to a target port on a remote server.**   
  # ssh -L {target port}:{target host}:{attacker machine port} {target hostname}@{target IP}  
 $ ssh -L 2222:localhost:2222 ben@soulmate.htb  
 now, we can scan target's 2222 with nmap,  
