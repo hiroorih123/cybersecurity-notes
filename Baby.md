@@ -10,6 +10,8 @@
  $ echo "10.129.116.120 baby.vl BabyDC.baby.vl" | sudo tee -a /etc/hosts  
   
  Results of nmap scan show that the target machine is Windows and LDAP port(389, 3268) is open  
+  ** LDAP (Lightweight Directory Access Protocol) is a protocol used to access and manage directory information over a network. When LDAP is open, it can cause information disclosure **
+
   
 ## 2 user flag
  $ ldapsearch -x -b "dc=baby,dc=vl" "(objectClass=user)" -H ldap://BabyDC.baby.vl  
@@ -34,9 +36,8 @@
  Now, we can get access with the password we set and get user flag!!  
  $ evil-winrm -i baby.vl -u caroline.robinson -p {New password}  
   
-  
 ## 3 root flag
- winrm$ whoami /priv  
+ winrm)$ whoami /priv  
  the output show that caroline robinson account have  
    "SeBackupPrivilege", "SeRestorePrivilege" which are usually given to users in the "Backup Operators" group.  
   

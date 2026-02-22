@@ -38,7 +38,7 @@
 ## 3 Root flag
  container)$ sudo -l  
  -> "(ALL : ALL) ALL" is in the output, this means we can run anything with sudo as limesvc  
- target)$ sudo su  
+ container)$ sudo su  
  we have root, but this is on the container and we cannot access to the root.txt now.  
   
  container)$ findmnt -o TARGET,SOURCE,FSTYPE,PROPAGATION  
