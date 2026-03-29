@@ -273,8 +273,6 @@ Login as root:
 ```bash
 ssh -i /tmp/mykey root@localhost
 ```
-
-```
 [+] get Root flag !! [+]
 
 
